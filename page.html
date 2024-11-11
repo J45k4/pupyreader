@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pupyreader</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <style>
+        .loading {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            border-top-color: #000;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Pupyreader</h1>
+    <h3>API Key:</h3>
+    <div>
+        <input type="text" id="apiKeyInput" placeholder="Enter OpenAI API Key">
+        <button onclick="saveApiKey()">Save API Key</button>
+    </div>
+
+    <h3>Upload a PDF file:</h3>
+    <div>
+        <input type="file" id="pdfFile" accept="application/pdf">
+        <button onclick="extractText()">Convert</button>
+    </div>
+    <pre id="output"></pre>
+
+    <script>
+        const pages = JSON.parse(localStorage.getItem('extractedPages'));
+        const lastViewedPage = localStorage.getItem('lastViewedPage');
+        const storedApiKey = localStorage.getItem('openaiApiKey');
+        const translationCache = {};
+
+        document.addEventListener('DOMContentLoaded', (event) => {
+            if (pages) {
+                renderPagesIndividually(pages);
+                if (lastViewedPage) {
+                    document.getElementById(lastViewedPage).scrollIntoView();
+                }
+            }
+            if (storedApiKey) {
+                document.getElementById('apiKeyInput').value = storedApiKey;
+            }
+        });
+
+        async function extractText() {
+            const fileInput = document.getElementById('pdfFile');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select a PDF file first.");
+                return;
+            }
+
+            // Read the file as a binary string
+            const fileReader = new FileReader();
+            fileReader.readAsArrayBuffer(file);
+            fileReader.onload = async function() {
+                const typedArray = new Uint8Array(fileReader.result);
+                const pdf = await pdfjsLib.getDocument(typedArray).promise;
+
+                let pages = {};
+
+                // Loop through each page
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const textContentObj = await page.getTextContent();
+
+                    const pageText = textContentObj.items.map(item => item.str).join("");
+                    pages[`Page ${pageNum}`] = pageText;
+                }
+
+                // Store the extracted text in localStorage
+                localStorage.setItem('extractedPages', JSON.stringify(pages));
+
+                // Display the extracted text
+                renderPagesIndividually(pages);
+            };
+        }
+
+        async function renderPagesIndividually(pages) {
+            let innerHtml = "";
+            for (const [page, text] of Object.entries(pages)) {
+                innerHtml += `<div id="${page}"><h4>${page}</h4><div style="white-space: normal">${text}</div><div class="translation" style="border: 1px solid #000; padding: 10px; margin-top: 10px; display: none;"></div></div>`;
+            }
+            document.getElementById('output').innerHTML = innerHtml;
+
+            // Add event listeners to store the last viewed page
+            document.querySelectorAll('div[id^="Page"]').forEach(div => {
+                div.addEventListener('click', () => {
+                    localStorage.setItem('lastViewedPage', div.id);
+                });
+            });
+
+            // Add event listener for text selection
+            document.getElementById('output').addEventListener('mouseup', () => {
+                const selectedText = window.getSelection().toString().trim();
+                if (selectedText) {
+                    displayTranslation(selectedText);
+                }
+            });
+        }
+
+        async function displayTranslation(text) {
+            // Remove any existing translations
+            document.querySelectorAll('.translation').forEach(div => {
+                div.style.display = 'none';
+            });
+
+            // Get the selected div and translation div
+            const selectedDiv = window.getSelection().anchorNode.parentElement.closest('div[id^="Page"]');
+            const translationDiv = selectedDiv.querySelector('.translation');
+            translationDiv.innerHTML = `<div class="loading"></div>`;
+            translationDiv.style.display = 'block';
+
+            // Check if the translation is already cached
+            if (translationCache[text]) {
+                translationDiv.innerHTML = `<strong>Translation:</strong> <div style="white-space: normal">${translationCache[text]}</div>`;
+                return;
+            }
+
+            // Call GPT-4-mini API for translation
+            const translation = await getTranslationFromGPT4Mini(text);
+            translationCache[text] = translation; // Cache the translation
+            translationDiv.innerHTML = `<strong>Translation:</strong> <div style="white-space: normal">${translation}</div>`;
+        }
+
+        async function getTranslationFromGPT4Mini(text) {
+            const apiKey = localStorage.getItem('openaiApiKey');
+            if (!apiKey) {
+                alert('Please enter and save your OpenAI API key.');
+                return 'No API key';
+            }
+
+            try {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o-mini",
+                        messages: [
+                            {
+                                role: "system",
+                                content: `You are a helpful assistant that translates text. Only respond with the translation nothing elese.
+								if you are translating chinese please include the pinyin as well.`
+                            },
+                            {
+                                role: "user",
+                                content: `Translate the following text: ${text}`
+                            }
+                        ]
+                    })
+                });
+
+                const data = await response.json();
+                return data.choices[0].message.content;
+            } catch (error) {
+                console.error('Error fetching translation:', error);
+                return 'Translation error';
+            }
+        }
+
+        function saveApiKey() {
+            const apiKey = document.getElementById('apiKeyInput').value;
+            localStorage.setItem('openaiApiKey', apiKey);
+            alert('API key saved.');
+        }
+    </script>
+</body>
+</html>
