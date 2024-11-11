@@ -2,42 +2,116 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pupyreader</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Replace with your preferred font -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <!-- Styles -->
     <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f4f6f8;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            padding: 20px;
+            color: #2c3e50;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            margin: auto;
+        }
+        .section {
+            background-color: #fff;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #34495e;
+        }
+        .section input[type="text"],
+        .section input[type="file"] {
+            width: calc(100% - 120px);
+            padding: 10px;
+            margin-right: 10px;
+            border: 1px solid #ccd1d9;
+            border-radius: 4px;
+        }
+        .section button {
+            padding: 11px 20px;
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .section button:hover {
+            background-color: #2980b9;
+        }
+        #output {
+            background-color: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        #output h4 {
+            color: #2c3e50;
+        }
+        /* Loading Spinner */
         .loading {
             display: inline-block;
             width: 24px;
             height: 24px;
-            border: 3px solid rgba(0, 0, 0, 0.3);
+            vertical-align: middle;
+            border: 3px solid rgba(0,0,0,0.2);
             border-radius: 50%;
-            border-top-color: #000;
-            animation: spin 1s ease-in-out infinite;
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
         }
-
         @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
+            to { transform: rotate(360deg); }
+        }
+        /* Translation Box */
+        .translation {
+            background-color: #ecf0f1;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 4px;
+        }
+        .translation strong {
+            display: block;
+            margin-bottom: 10px;
+            color: #2c3e50;
         }
     </style>
 </head>
 <body>
     <h1>Pupyreader</h1>
-    <h3>API Key:</h3>
-    <div>
-        <input type="text" id="apiKeyInput" placeholder="Enter OpenAI API Key">
-        <button onclick="saveApiKey()">Save API Key</button>
+    <div class="container">
+        <div class="section">
+            <h3>API Key:</h3>
+            <input type="text" id="apiKeyInput" placeholder="Enter OpenAI API Key">
+            <button onclick="saveApiKey()">Save API Key</button>
+        </div>
+        <div class="section">
+            <h3>Upload a PDF file:</h3>
+            <input type="file" id="pdfFile" accept="application/pdf">
+            <button onclick="extractText()">Convert</button>
+        </div>
+        <div id="output"></div>
     </div>
-
-    <h3>Upload a PDF file:</h3>
-    <div>
-        <input type="file" id="pdfFile" accept="application/pdf">
-        <button onclick="extractText()">Convert</button>
-    </div>
-    <pre id="output"></pre>
-
     <script>
         const pages = JSON.parse(localStorage.getItem('extractedPages'));
         const lastViewedPage = localStorage.getItem('lastViewedPage');
