@@ -95,6 +95,50 @@
             margin-bottom: 10px;
             color: #2c3e50;
         }
+        /* Highlighted Text */
+        .highlighted {
+            background-color: yellow;
+        }
+        .collapsible {
+            margin-bottom: 20px;
+        }
+
+        .collapsible-button {
+            background-color: #3498db;
+            color: white;
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin: 5px 0;
+        }
+
+        .collapsible-button:hover {
+            background-color: #2980b9;
+        }
+
+        .collapsible-content {
+            padding: 6px 10px;
+            border: 1px solid #ccd1d9;
+            border-radius: 4px;
+            background-color: #f4f6f8;
+            margin-bottom: 10px;
+        }
+
+        .char-counts {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+        }
+
+        .char-count-item {
+            background-color: #ecf0f1;
+            padding: 4px 6px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 10px;
+        }
     </style>
 </head>
 <body>
@@ -113,16 +157,20 @@
         <div id="output"></div>
     </div>
     <script>
-        const pages = JSON.parse(localStorage.getItem('extractedPages'));
+        // Retrieve cached translations from localStorage
+        const pages = JSON.parse(localStorage.getItem('extractedPages')) || {};
         const lastViewedPage = localStorage.getItem('lastViewedPage');
         const storedApiKey = localStorage.getItem('openaiApiKey');
-        const translationCache = {};
+        const translationCache = JSON.parse(localStorage.getItem('translationCache')) || {};
 
         document.addEventListener('DOMContentLoaded', (event) => {
-            if (pages) {
+            if (Object.keys(pages).length > 0) {
                 renderPagesIndividually(pages);
                 if (lastViewedPage) {
-                    document.getElementById(lastViewedPage).scrollIntoView();
+                    const pageElement = document.getElementById(lastViewedPage);
+                    if (pageElement) {
+                        pageElement.scrollIntoView();
+                    }
                 }
             }
             if (storedApiKey) {
@@ -152,7 +200,7 @@
                     const page = await pdf.getPage(pageNum);
                     const textContentObj = await page.getTextContent();
 
-                    const pageText = textContentObj.items.map(item => item.str).join("");
+                    const pageText = textContentObj.items.map(item => item.str).join(" ");
                     pages[`Page ${pageNum}`] = pageText;
                 }
 
@@ -164,12 +212,92 @@
             };
         }
 
+        function countCharacters(text) {
+            const charCount = {};
+            for (const char of text) {
+                if (charCount[char]) {
+                    charCount[char]++;
+                } else {
+                    charCount[char] = 1;
+                }
+            }
+            return charCount;
+        }
+
+        function displayCharacterCounts(charCount) {
+            let countHtml = '<div class="char-counts">';
+            for (const [char, count] of Object.entries(charCount)) {
+                countHtml += `<div class="char-count-item">'${char}': ${count}</div>`;
+            }
+            countHtml += '</div>';
+            return countHtml;
+        }
+
+        function displayTotalDistinct(charCount) {
+            const total = Object.keys(charCount).length;
+            return `<p>Total Distinct Characters: <strong>${total}</strong></p>`;
+        }
+
         async function renderPagesIndividually(pages) {
             let innerHtml = "";
+            let fullText = "";
+
             for (const [page, text] of Object.entries(pages)) {
-                innerHtml += `<div id="${page}"><h4>${page}</h4><div style="white-space: normal">${text}</div><div class="translation" style="border: 1px solid #000; padding: 10px; margin-top: 10px; display: none;"></div></div>`;
+                fullText += text;
+                const highlightedText = highlightTranslatedText(text);
+                const charCount = countCharacters(text);
+                const totalDistinctHtml = displayTotalDistinct(charCount);
+                const charCountHtml = displayCharacterCounts(charCount);
+
+                const collapsibleCounts = `
+                    <div class="collapsible">
+                        <button type="button" class="collapsible-button">Show Character Counts</button>
+                        <div class="collapsible-content" style="display: none;">
+                            ${charCountHtml}
+                        </div>
+                    </div>
+                `;
+
+                innerHtml += `
+                    <div id="${page}">
+                        <h4>${page}</h4>
+                        ${totalDistinctHtml}
+                        ${collapsibleCounts}
+                        <div style="white-space: normal">${highlightedText}</div>
+                        <div class="translation" style="border: 1px solid #000; padding: 10px; margin-top: 10px; display: none;"></div>
+                    </div>
+                `;
             }
-            document.getElementById('output').innerHTML = innerHtml;
+
+            // Global Character Counts
+            const charCount = countCharacters(fullText);
+            const totalDistinctHtmlGlobal = displayTotalDistinct(charCount);
+            const charCountHtmlGlobal = displayCharacterCounts(charCount);
+
+            const collapsibleCountsGlobal = `
+                <div class="collapsible">
+                    <button type="button" class="collapsible-button">Show Global Character Counts</button>
+                    <div class="collapsible-content" style="display: none;">
+                        ${charCountHtmlGlobal}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('output').innerHTML = collapsibleCountsGlobal + totalDistinctHtmlGlobal + innerHtml;
+
+            // Add event listeners for all collapsible buttons
+            document.querySelectorAll('.collapsible-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    const content = this.nextElementSibling;
+                    if (content.style.display === "none") {
+                        content.style.display = "block";
+                        this.textContent = "Hide Character Counts";
+                    } else {
+                        content.style.display = "none";
+                        this.textContent = "Show Character Counts";
+                    }
+                });
+            });
 
             // Add event listeners to store the last viewed page
             document.querySelectorAll('div[id^="Page"]').forEach(div => {
@@ -187,6 +315,16 @@
             });
         }
 
+        function highlightTranslatedText(text) {
+            const escapedText = escapeRegExp(text);
+            const regex = new RegExp(`(${Object.keys(translationCache).map(t => escapeRegExp(t)).join('|')})`, 'g');
+            return text.replace(regex, '<span class="highlighted">$1</span>');
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
         async function displayTranslation(text) {
             // Remove any existing translations
             document.querySelectorAll('.translation').forEach(div => {
@@ -194,7 +332,11 @@
             });
 
             // Get the selected div and translation div
-            const selectedDiv = window.getSelection().anchorNode.parentElement.closest('div[id^="Page"]');
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+
+            const range = selection.getRangeAt(0);
+            const selectedDiv = range.commonAncestorContainer.parentElement.closest('div[id^="Page"]');
             const translationDiv = selectedDiv.querySelector('.translation');
             translationDiv.innerHTML = `<div class="loading"></div>`;
             translationDiv.style.display = 'block';
@@ -202,13 +344,29 @@
             // Check if the translation is already cached
             if (translationCache[text]) {
                 translationDiv.innerHTML = `<strong>Translation:</strong> <div style="white-space: normal">${translationCache[text]}</div>`;
+                highlightSelectedText(range, text);
                 return;
             }
 
             // Call GPT-4-mini API for translation
             const translation = await getTranslationFromGPT4Mini(text);
             translationCache[text] = translation; // Cache the translation
+            localStorage.setItem('translationCache', JSON.stringify(translationCache)); // Persist cache
+
             translationDiv.innerHTML = `<strong>Translation:</strong> <div style="white-space: normal">${translation}</div>`;
+            highlightSelectedText(range, text);
+        }
+
+        function highlightSelectedText(range, text) {
+            const span = document.createElement('span');
+            span.className = 'highlighted';
+            span.textContent = text;
+
+            range.deleteContents();
+            range.insertNode(span);
+
+            // Clear selection
+            window.getSelection().removeAllRanges();
         }
 
         async function getTranslationFromGPT4Mini(text) {
@@ -230,6 +388,7 @@
                         messages: [
                             {
                                 role: "system",
+								// Dont change this content
                                 content: `You are a helpful assistant that translates text. Only respond with the translation nothing elese.
 								if you are translating chinese please include the pinyin as well.`
                             },
@@ -240,6 +399,10 @@
                         ]
                     })
                 });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
 
                 const data = await response.json();
                 return data.choices[0].message.content;
