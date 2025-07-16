@@ -154,6 +154,11 @@
             <input type="file" id="pdfFile" accept="application/pdf">
             <button onclick="extractText()">Convert</button>
         </div>
+        <div class="section">
+            <h3>Or paste text directly:</h3>
+            <textarea id="textInput" placeholder="Paste your text here" rows="5"></textarea>
+            <button onclick="processText()">Process Text</button>
+        </div>
         <div id="output"></div>
     </div>
     <script>
